@@ -34,15 +34,14 @@
  */
 
 .equ UART, 0x10001000
-.equ MSG_PROMPT_SIZE, 21
+.equ	STACK, 0x10000
 
 .global _start
 _start:
 	movia r16, UART
 
-	movia r23, cmd_buffer
-
 	MAIN_LOOP:		
+		movia r23, cmd_buffer		
 
 		# print "Entre com o comando: "
 		movia r17, msg_prompt
@@ -105,14 +104,15 @@ SWITCH_FUNCTIONS:
 	ldb r9, 0(r8)
 
 	addi r9, r9, -48
-	beq r9, r0, LED_FUNCTIONS
+	beq r9, r0, LEDS_CALL
 
 	beq r9, r10, TRIANG_FUNCTION
 
 	beq r9, r11, ROTATE_FUNCTIONS
 
-LED_FUNCTIONS:
-	br LED_FUNCTIONS
+LEDS_CALL:
+	call LED_FUNCTIONS
+	br MAIN_LOOP
 
 TRIANG_FUNCTION:
 	br TRIANG_FUNCTION
