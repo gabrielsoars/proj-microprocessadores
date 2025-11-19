@@ -1,0 +1,3 @@
+.global ROTATE_FUNCTIONS
+ROTATE_FUNCTIONS:
+    ret
