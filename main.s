@@ -34,17 +34,15 @@
  */
 
 .equ UART, 0x10001000
-.equ	STACK, 0x10000
+.equ STACK, 0x10000
 .equ SEVEN_SEG_BASE, 0x10000020      # Displays 7 Segmentos (HEX)
 .equ SWITCHES_BASE, 0x10000040       # Chaves (SW)
 .equ LEDS, 0x10000000
-.equ APAGAR_MASK, 0x11111110
 
 .global _start
 _start:
-	movia sp, 0x7FFFFC # Inicializa stack pointer	
+	movia sp, STACK # Inicializa stack pointer	
 	movia r16, UART
-
 
 	MAIN_LOOP:		
 		movia r23, cmd_buffer		
@@ -159,6 +157,10 @@ LED_FUNCTIONS:
 
 	beq r15, r0, ACENDER_LEDS
 
+	addi r14, r0, 1
+	bne r15, r14, LED_RETURN
+
+	# operações para apagar o led digitado
 	addi r13, r0, 1
 	addi r14, r11, -1
 	sll r11, r13, r14
@@ -166,7 +168,8 @@ LED_FUNCTIONS:
 	and r18, r18, r17
 
 	stwio r18, (r12)
-	
+
+LED_RETURN:
 	ret
 
 ACENDER_LEDS:
@@ -179,6 +182,12 @@ ACENDER_LEDS:
 	ret
 
 TRIANG_FUNCTION:
+	# carrega o segundo termo digitado da memória
+	ldb r15, 1(r8) # mudar para acessar como índice
+	addi r15, r15, -48 # transforma termo digitado na memória em um inteiro
+
+	bne r15, r0, TRIANG_RETURN # se não for 0 (comando: 10), vai para o fim da rotina
+
 	addi sp, sp, -4
 
 	stw ra, 4(sp)
@@ -189,6 +198,7 @@ TRIANG_FUNCTION:
 
 	ldw ra, 4(sp)
 	addi sp, sp, 4
+TRIANG_RETURN:
     ret
 
 
@@ -280,7 +290,7 @@ END_DISPLAY:
     ret
 
 ROTATE_FUNCTIONS:
-    ret
+	ret
 
 .org 0x500
 msg_prompt:
