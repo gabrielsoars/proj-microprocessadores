@@ -38,9 +38,58 @@
 .equ SEVEN_SEG_BASE, 0x10000020      # Displays 7 Segmentos (HEX)
 .equ SWITCHES_BASE, 0x10000040       # Chaves (SW)
 .equ LEDS, 0x10000000
+.equ TEMPORIZADOR, 0x10002000
+.equ KEYS_BASE, 0x10000050           # Pushbuttons (KEY3-KEY0)
+
+.org 0x20
+	addi sp, sp, -4
+	stw ra, (sp)
+
+	rdctl et, ipending /* Check if external interrupt occurred */
+	beq et, r0, OTHER_EXCEPTIONS /* If zero, check exceptions */
+	subi ea, ea, 4 /* Hardware interrupt, decrement ea to execute the interrupted */
+
+	/* instruction upon return to main program */
+
+	andi r13, et, 1 /* Check if irq0 asserted */
+	beq r13, r0, OTHER_INTERRUPTS /* If not, check other external interrupts */
+	call EXT_IRQ0
+
+OTHER_INTERRUPTS:
+	br FIM_RTI
+
+OTHER_EXCEPTIONS:
+	br FIM_RTI
+
+FIM_RTI:
+	ldw ra, (sp)
+	addi sp, sp, 4
+	eret
+
+EXT_IRQ0:
+
+	movia r9, rotation_active
+	ldb r9, 0(r9)
+
+	# limpar o bit TO do Status Register (limpa o ipending)
+	movia r13, TEMPORIZADOR
+	movia r14, 0b1
+	stwio r14, (r13)
+
+	beq r9, r0, FIM_RTI
+
+	movia r8, SEVEN_SEG_BASE
+	movia r10, SEVEN_SEG_TABLE
+
+	ldb r9, 0(r10) # Código para '0'
+    stbio r9, 0(r8) # Escreve no HEX0
+	
+	br FIM_RTI
 
 .global _start
 _start:
+	call ENABLE_INTERRUPTIONS
+
 	movia sp, STACK # Inicializa stack pointer	
 	movia r16, UART
 
@@ -290,9 +339,40 @@ END_DISPLAY:
     ret
 
 ROTATE_FUNCTIONS:
+	movia r14, rotation_active
+	movia r13, 1 
+	stb r13, 0(r14)
+    ret
+
+ENABLE_INTERRUPTIONS:
+    movia r8, TEMPORIZADOR
+	movia r10, 0b111
+	# setar os bits ITO, CONT, START
+	stwio r10, 4(r8)
+
+    # setar start value em timer
+    movia r11, 10000000
+
+    andi r10, r9, 0xFFFF
+	stwio r10, 8(r11) # low
+
+	srli r10, r9, 16
+	stwio r10, 12(r11) # high
+
+    movia r10, 0b1
+	# setar o bit IRQ 0 no ienable
+	wrctl ienable, r10
+
+	# setar o PIE do processador
+	movi r10, 1
+	wrctl status, r10
+
 	ret
 
 .org 0x500
+rotation_active:
+	.word 0
+
 msg_prompt:
     .string  "Entre com o comando: "
 
