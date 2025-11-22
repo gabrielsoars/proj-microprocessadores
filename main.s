@@ -426,7 +426,7 @@ _display_decimal:
     movi r14, 0x0  # Código para display apagado
     movi r6, 10 # Divisor
     mov r7, r0 # Offset do display
-    movi r5, 6 # Máximo 6 dígitos
+    movi r5, 8 # Máximo 6 dígitos
 
     # Trata caso especial: número zero
     bne r4, r0, LOOP_CONVERT_DISPLAY
