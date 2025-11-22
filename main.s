@@ -67,31 +67,138 @@ FIM_RTI:
 	eret
 
 EXT_IRQ0:
-
-	movia r9, rotation_active
-	ldb r9, 0(r9)
+    # Salva contexto
+    addi sp, sp, -36
+    stw r8, 0(sp)
+    stw r9, 4(sp)
+    stw r10, 8(sp)
+    stw r11, 12(sp)
+    stw r12, 16(sp)
+    stw r13, 20(sp)
+    stw r14, 24(sp)
+    stw r15, 28(sp)
+    stw r16, 32(sp)
 
 	# limpar o bit TO do Status Register (limpa o ipending)
-	movia r13, TEMPORIZADOR
-	movia r14, 0b1
-	stwio r14, (r13)
+	movia r8, TEMPORIZADOR
+    movi r9, 0
+	stwio r9, 0(r8) # Escreve 0 no status para limpar TO
 
-	beq r9, r0, FIM_RTI
+    # Verifica se a rotação está ativa
+	movia r12, rotation_active
+	ldw r9, 0(r12)          # CORREÇÃO: ldb -> ldw (para alinhar memória)
+	beq r9, r0, IRQ_EXIT
 
-	movia r8, SEVEN_SEG_BASE
-	movia r10, SEVEN_SEG_TABLE
+    # --- Lógica dos Botões (KEY1 e KEY2) ---
+    movia r8, KEYS_BASE
+    ldwio r9, 0(r8)       # Lê chaves atuais (KEY3..0)
+    
+    # Detecta Borda (Falling Edge/Press): Edge = Prev & (~Curr)
+    movia r13, prev_keys
+    ldw r10, 0(r13)       # r10 = Estado anterior
+    stw r9, 0(r13)        # Atualiza estado anterior com o atual
+    
+    # CORREÇÃO: 'not' substituído por 'nor' com r0
+    nor r14, r9, r0       # Inverte atual (press = 1 logicamente agora)
+    
+    and r11, r10, r14     # r11 = Bits que mudaram de Solto(1) para Pressionado(0)
 
-	ldb r9, 0(r10) # Código para '0'
-    stbio r9, 0(r8) # Escreve no HEX0
-	
+    # Verifica KEY1 (bit 1) -> Inverter Direção
+    andi r15, r11, 0b10
+    beq r15, r0, CHECK_KEY2
+    
+    movia r14, rotation_dir
+    ldw r15, 0(r14)
+    xori r15, r15, 1      # Toggle 0 <-> 1
+    stw r15, 0(r14)
+
+CHECK_KEY2:
+    # Verifica KEY2 (bit 2) -> Pausar/Resumir
+    andi r15, r11, 0b100
+    beq r15, r0, CHECK_ROTATION
+
+    movia r14, rotation_paused
+    ldw r15, 0(r14)
+    xori r15, r15, 1      # Toggle 0 <-> 1
+    stw r15, 0(r14)
+
+CHECK_ROTATION:
+    # Se pausado, pula a atualização do offset, mas redesenha
+    movia r14, rotation_paused
+    ldw r15, 0(r14)
+    bne r15, r0, UPDATE_DISPLAY
+
+    # --- Atualiza Offset ---
+    movia r14, rotation_offset
+    ldw r10, 0(r14)       # Offset atual
+    
+    movia r13, rotation_dir
+    ldw r15, 0(r13)       # Direção (0=Direita, 1=Esquerda)
+    bne r15, r0, DIR_LEFT
+
+DIR_RIGHT:
+    # Para rotacionar texto p/ direita, a janela (offset) move-se p/ esquerda (decrementa)
+    subi r10, r10, 1
+    bge r10, r0, SAVE_OFFSET
+    movi r10, 11          # Wrap para final do buffer (12 chars - 1)
+    br SAVE_OFFSET
+
+DIR_LEFT:
+    addi r10, r10, 1
+    movi r15, 12
+    blt r10, r15, SAVE_OFFSET
+    movi r10, 0           # Wrap para inicio
+
+SAVE_OFFSET:
+    stw r10, 0(r14)
+
+UPDATE_DISPLAY:
+    # --- Redesenha os 6 displays ---
+    movia r8, SEVEN_SEG_BASE
+    movia r9, display_pattern
+    movia r14, rotation_offset
+    ldw r10, 0(r14)       # Offset inicial
+    
+    movi r11, 0           # i = 0
+    movi r12, 6           # Limite i < 6
+    movi r13, 12          # Tamanho do buffer
+
+LOOP_DISP:
+    add r15, r10, r11     # index = offset + i
+    
+    # Modulo: se index >= 12, index -= 12
+    blt r15, r13, FETCH_CHAR
+    sub r15, r15, r13
+
+FETCH_CHAR:
+    add r16, r9, r15      # Endereço do byte
+    ldb r14, 0(r16)       # Carrega código 7-seg
+    
+    add r16, r8, r11      # Endereço do HEX[i]
+    stbio r14, 0(r16)
+    
+    addi r11, r11, 1
+    blt r11, r12, LOOP_DISP
+
+IRQ_EXIT:
+    ldw r8, 0(sp)
+    ldw r9, 4(sp)
+    ldw r10, 8(sp)
+    ldw r11, 12(sp)
+    ldw r12, 16(sp)
+    ldw r13, 20(sp)
+    ldw r14, 24(sp)
+    ldw r15, 28(sp)
+    ldw r16, 32(sp)
+    addi sp, sp, 36
 	br FIM_RTI
 
 .global _start
 _start:
-	call ENABLE_INTERRUPTIONS
-
 	movia sp, STACK # Inicializa stack pointer	
 	movia r16, UART
+
+	call ENABLE_INTERRUPTIONS
 
 	MAIN_LOOP:		
 		movia r23, cmd_buffer		
@@ -231,6 +338,9 @@ ACENDER_LEDS:
 	ret
 
 TRIANG_FUNCTION:
+	movia r14, rotation_active
+	stw r0, 0(r14) # CORREÇÃO: stw (word)
+
 	# carrega o segundo termo digitado da memória
 	ldb r15, 1(r8) # mudar para acessar como índice
 	addi r15, r15, -48 # transforma termo digitado na memória em um inteiro
@@ -249,7 +359,6 @@ TRIANG_FUNCTION:
 	addi sp, sp, 4
 TRIANG_RETURN:
     ret
-
 
 # --- Lê o valor das chaves (SW7-SW0) ---
 # Retorna: r2 = valor 8 bits
@@ -339,39 +448,95 @@ END_DISPLAY:
     ret
 
 ROTATE_FUNCTIONS:
+    # r8 já contém o endereço de cmd_buffer
+    # Verifica o segundo caractere (r8 + 1)
+    ldb r9, 1(r8)
+    addi r9, r9, -48
+    
+    beq r9, r0, START_ROTATION # Se '0' -> Comando 20
+    
+    movi r10, 1
+    beq r9, r10, STOP_ROTATION # Se '1' -> Comando 21
+    
+    ret
+
+START_ROTATION:
 	movia r14, rotation_active
-	movia r13, 1 
-	stb r13, 0(r14)
+	movia r13, 1
+	stw r13, 0(r14)
+    
+    # Resetar variáveis de controle
+    movia r14, rotation_dir
+    stw r0, 0(r14) # 0 = Direita
+    
+    movia r14, rotation_paused
+    stw r0, 0(r14) # 0 = Não pausado
+    
+    movia r14, rotation_offset
+    stw r0, 0(r14)
+
+    ret
+
+STOP_ROTATION:
+    movia r14, rotation_active
+    stw r0, 0(r14) # CORREÇÃO: stw (word)
+    
+    # Limpa os displays
+    movia r8, SEVEN_SEG_BASE
+    movi r9, 0
+    movi r10, 6 # 6 Displays
+LOOP_CLEAR:
+    stbio r9, 0(r8)
+    addi r8, r8, 1
+    subi r10, r10, 1
+    bne r10, r0, LOOP_CLEAR
     ret
 
 ENABLE_INTERRUPTIONS:
     movia r8, TEMPORIZADOR
-	movia r10, 0b111
-	# setar os bits ITO, CONT, START
-	stwio r10, 4(r8)
 
-    # setar start value em timer
+    # 1. Parar o timer primeiro (escreve 0 no Control)
+    movi r10, 0
+    stwio r10, 4(r8) 
+    
+    # 2. Limpar flag de Timeout anterior (escreve 0 no Status)
+    stwio r10, 0(r8)
+
+    # 3. Configurar o Período (10.000.000 ciclos = 200ms)
+    # IMPORTANTE: Configurar o tempo ANTES de dar Start
     movia r11, 10000000
+    
+    andi r10, r11, 0xFFFF
+    stwio r10, 8(r8)  # Period Low
 
-    andi r10, r9, 0xFFFF
-	stwio r10, 8(r11) # low
+    srli r10, r11, 16
+    stwio r10, 12(r8) # Period High
 
-	srli r10, r9, 16
-	stwio r10, 12(r11) # high
+    # 4. Ligar o timer (START | CONT | ITO)
+    movia r10, 0b111
+    stwio r10, 4(r8)
 
+    # 5. Habilitar interrupções no processador (IENABLE e STATUS)
     movia r10, 0b1
-	# setar o bit IRQ 0 no ienable
-	wrctl ienable, r10
+    wrctl ienable, r10
+    
+    movi r10, 1
+    wrctl status, r10
 
-	# setar o PIE do processador
-	movi r10, 1
-	wrctl status, r10
-
-	ret
+    ret
 
 .org 0x500
 rotation_active:
 	.word 0
+
+.align 2
+rotation_dir:    .word 0  # 0 = Dir, 1 = Esq
+rotation_paused: .word 0  # 0 = Run, 1 = Pause
+rotation_offset: .word 0  # Índice inicial da janela
+prev_keys:       .word 0xFF # Estado anterior das chaves
+
+display_pattern:
+    .byte 0x3F, 0x06, 0x00, 0x5B, 0x3F, 0x5B, 0x7D, 0x00, 0x00, 0x00, 0x00, 0x00
 
 msg_prompt:
     .string  "Entre com o comando: "
