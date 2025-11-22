@@ -11,6 +11,6 @@ Projeto final de microprocessadores.
 # To do
 - switch.s
 - ~~leds.s~~
-- triang.s
+- ~~triang.s~~
 - rotate.s
 - tratamento de excessões
