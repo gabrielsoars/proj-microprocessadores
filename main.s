@@ -35,7 +35,8 @@
 
 .equ UART, 0x10001000
 .equ STACK, 0x10000
-.equ SEVEN_SEG_BASE, 0x10000020      # Displays 7 Segmentos (HEX)
+.equ SEVEN_SEG_LOW,  0x10000020      # Displays HEX3 até HEX0
+.equ SEVEN_SEG_HIGH, 0x10000030      # Displays HEX7 até HEX4
 .equ SWITCHES_BASE, 0x10000040       # Chaves (SW)
 .equ LEDS, 0x10000000
 .equ TEMPORIZADOR, 0x10002000
@@ -68,7 +69,7 @@ FIM_RTI:
 
 EXT_IRQ0:
     # Salva contexto
-    addi sp, sp, -36
+    addi sp, sp, -40
     stw r8, 0(sp)
     stw r9, 4(sp)
     stw r10, 8(sp)
@@ -78,6 +79,7 @@ EXT_IRQ0:
     stw r14, 24(sp)
     stw r15, 28(sp)
     stw r16, 32(sp)
+    stw r17, 36(sp)
 
 	# limpar o bit TO do Status Register (limpa o ipending)
 	movia r8, TEMPORIZADOR
@@ -86,10 +88,10 @@ EXT_IRQ0:
 
     # Verifica se a rotação está ativa
 	movia r12, rotation_active
-	ldw r9, 0(r12)          # CORREÇÃO: ldb -> ldw (para alinhar memória)
+	ldw r9, 0(r12)
 	beq r9, r0, IRQ_EXIT
 
-    # --- Lógica dos Botões (KEY1 e KEY2) ---
+    # --- Lógica dos Botões ---
     movia r8, KEYS_BASE
     ldwio r9, 0(r8)       # Lê chaves atuais (KEY3..0)
     
@@ -98,12 +100,10 @@ EXT_IRQ0:
     ldw r10, 0(r13)       # r10 = Estado anterior
     stw r9, 0(r13)        # Atualiza estado anterior com o atual
     
-    # CORREÇÃO: 'not' substituído por 'nor' com r0
-    nor r14, r9, r0       # Inverte atual (press = 1 logicamente agora)
-    
-    and r11, r10, r14     # r11 = Bits que mudaram de Solto(1) para Pressionado(0)
+    nor r14, r9, r0       # Inverte (active low -> active high)
+    and r11, r10, r14     # Detecta borda de descida
 
-    # Verifica KEY1 (bit 1) -> Inverter Direção
+    # KEY1: Inverter Direção
     andi r15, r11, 0b10
     beq r15, r0, CHECK_KEY2
     
@@ -119,11 +119,10 @@ CHECK_KEY2:
 
     movia r14, rotation_paused
     ldw r15, 0(r14)
-    xori r15, r15, 1      # Toggle 0 <-> 1
+    xori r15, r15, 1
     stw r15, 0(r14)
 
 CHECK_ROTATION:
-    # Se pausado, pula a atualização do offset, mas redesenha
     movia r14, rotation_paused
     ldw r15, 0(r14)
     bne r15, r0, UPDATE_DISPLAY
@@ -140,43 +139,63 @@ DIR_RIGHT:
     # Para rotacionar texto p/ direita, a janela (offset) move-se p/ esquerda (decrementa)
     subi r10, r10, 1
     bge r10, r0, SAVE_OFFSET
-    movi r10, 11          # Wrap para final do buffer (12 chars - 1)
+    movi r10, 8
     br SAVE_OFFSET
 
 DIR_LEFT:
     addi r10, r10, 1
-    movi r15, 12
+    movi r15, 8
     blt r10, r15, SAVE_OFFSET
-    movi r10, 0           # Wrap para inicio
+    movi r10, 0
 
 SAVE_OFFSET:
     stw r10, 0(r14)
 
 UPDATE_DISPLAY:
-    # --- Redesenha os 6 displays ---
-    movia r8, SEVEN_SEG_BASE
+    # --- Redesenha os 8 displays ---
+    # r10 = offset inicial do buffer
+    # r11 = contador do loop (0 a 7)
+    
     movia r9, display_pattern
     movia r14, rotation_offset
-    ldw r10, 0(r14)       # Offset inicial
+    ldw r10, 0(r14)
     
     movi r11, 0           # i = 0
-    movi r12, 6           # Limite i < 6
-    movi r13, 12          # Tamanho do buffer
+    movi r12, 8           # Limite i < 8 (AGORA SÃO 8 DISPLAYS)
+    movi r13, 8          # Tamanho do buffer circular
 
 LOOP_DISP:
-    add r15, r10, r11     # index = offset + i
+    # 1. Buscar o caractere no buffer
+    add r15, r10, r11     # index_buffer = offset + i
     
-    # Modulo: se index >= 12, index -= 12
+    # Modulo manual: se index >= 12, index -= 12
     blt r15, r13, FETCH_CHAR
     sub r15, r15, r13
 
 FETCH_CHAR:
-    add r16, r9, r15      # Endereço do byte
-    ldb r14, 0(r16)       # Carrega código 7-seg
+    add r16, r9, r15      # Endereço do byte no array
+    ldb r14, 0(r16)       # r14 = Código 7-seg
     
-    add r16, r8, r11      # Endereço do HEX[i]
+    # 2. Decidir em qual endereço de hardware escrever
+    # Se i (r11) < 4 -> usa SEVEN_SEG_LOW
+    # Se i (r11) >= 4 -> usa SEVEN_SEG_HIGH
+    
+    movi r17, 4
+    blt r11, r17, WRITE_LOW
+
+WRITE_HIGH:
+    movia r8, SEVEN_SEG_HIGH
+    sub r17, r11, r17     # offset_hw = i - 4
+    add r16, r8, r17      # Endereço final = BaseHigh + (i-4)
     stbio r14, 0(r16)
-    
+    br NEXT_ITER
+
+WRITE_LOW:
+    movia r8, SEVEN_SEG_LOW
+    add r16, r8, r11      # Endereço final = BaseLow + i
+    stbio r14, 0(r16)
+
+NEXT_ITER:
     addi r11, r11, 1
     blt r11, r12, LOOP_DISP
 
@@ -190,15 +209,17 @@ IRQ_EXIT:
     ldw r14, 24(sp)
     ldw r15, 28(sp)
     ldw r16, 32(sp)
-    addi sp, sp, 36
+    ldw r17, 36(sp)
+    addi sp, sp, 40
 	br FIM_RTI
 
 .global _start
 _start:
-	movia sp, STACK # Inicializa stack pointer	
-	movia r16, UART
-
+	movia sp, STACK # Inicializa stack pointer
+    
 	call ENABLE_INTERRUPTIONS
+
+	movia r16, UART
 
 	MAIN_LOOP:		
 		movia r23, cmd_buffer		
@@ -401,11 +422,11 @@ _display_decimal:
 
 	stw ra, 4(sp)
 
-    movia r8, SEVEN_SEG_BASE
-    movi r14, 0x0                  # Código para display apagado
-    movi r6, 10                     # Divisor
-    mov r7, r0                      # Offset do display
-    movi r5, 6                      # Máximo 6 dígitos
+    movia r8, SEVEN_SEG_LOW
+    movi r14, 0x0  # Código para display apagado
+    movi r6, 10 # Divisor
+    mov r7, r0 # Offset do display
+    movi r5, 6 # Máximo 6 dígitos
 
     # Trata caso especial: número zero
     bne r4, r0, LOOP_CONVERT_DISPLAY
@@ -427,8 +448,21 @@ LOOP_CONVERT_DISPLAY:
     add r10, r10, r9
     ldb r9, 0(r10)
 
-    # Escreve no display correto
+    # Logica simples de escrita: Base + Offset
+    # Se offset > 3 precisa mudar de base. 
+    # Para simplificar a função triangular existente, vamos assumir que cabe em 4 displays ou adaptar:
+    movi r13, 4
+    blt r7, r13, DISP_DEC_LOW
+    
+    movia r11, SEVEN_SEG_HIGH
+    subi r13, r7, 4
+    add r11, r11, r13
+    br DISP_DEC_WRITE
+
+DISP_DEC_LOW:
     add r11, r8, r7
+
+DISP_DEC_WRITE:
     stbio r9, 0(r11)
 
     addi r7, r7, 1
@@ -437,7 +471,17 @@ LOOP_CONVERT_DISPLAY:
 # Apaga displays não utilizados
 LOOP_BLANK_DIGITS:
     bge r7, r5, END_DISPLAY
+    
+    movi r13, 4
+    blt r7, r13, BLANK_LOW
+    movia r11, SEVEN_SEG_HIGH
+    subi r13, r7, 4
+    add r11, r11, r13
+    br BLANK_WRITE
+
+BLANK_LOW:
     add r11, r8, r7
+BLANK_WRITE:
     stbio r14, 0(r11)
     addi r7, r7, 1
     br LOOP_BLANK_DIGITS
@@ -462,7 +506,7 @@ ROTATE_FUNCTIONS:
 
 START_ROTATION:
 	movia r14, rotation_active
-	movia r13, 1
+	movia r13, 1 
 	stw r13, 0(r14)
     
     # Resetar variáveis de controle
@@ -479,53 +523,49 @@ START_ROTATION:
 
 STOP_ROTATION:
     movia r14, rotation_active
-    stw r0, 0(r14) # CORREÇÃO: stw (word)
+    stw r0, 0(r14)
     
-    # Limpa os displays
-    movia r8, SEVEN_SEG_BASE
+    # Limpar 8 displays
     movi r9, 0
-    movi r10, 6 # 6 Displays
-LOOP_CLEAR:
+    
+    # Limpa HEX0-HEX3
+    movia r8, SEVEN_SEG_LOW
     stbio r9, 0(r8)
-    addi r8, r8, 1
-    subi r10, r10, 1
-    bne r10, r0, LOOP_CLEAR
+    stbio r9, 1(r8)
+    stbio r9, 2(r8)
+    stbio r9, 3(r8)
+
+    # Limpa HEX4-HEX7
+    movia r8, SEVEN_SEG_HIGH
+    stbio r9, 0(r8)
+    stbio r9, 1(r8)
+    stbio r9, 2(r8)
+    stbio r9, 3(r8)
+    
     ret
 
 ENABLE_INTERRUPTIONS:
     movia r8, TEMPORIZADOR
-
-    # 1. Parar o timer primeiro (escreve 0 no Control)
     movi r10, 0
-    stwio r10, 4(r8) 
-    
-    # 2. Limpar flag de Timeout anterior (escreve 0 no Status)
-    stwio r10, 0(r8)
+    stwio r10, 4(r8) # Stop
+    stwio r10, 0(r8) # Clear TO
 
-    # 3. Configurar o Período (10.000.000 ciclos = 200ms)
-    # IMPORTANTE: Configurar o tempo ANTES de dar Start
-    movia r11, 10000000
-    
+    movia r11, 10000000 # 200ms
     andi r10, r11, 0xFFFF
-    stwio r10, 8(r8)  # Period Low
+	stwio r10, 8(r8)
+	srli r10, r11, 16
+	stwio r10, 12(r8)
 
-    srli r10, r11, 16
-    stwio r10, 12(r8) # Period High
+	movia r10, 0b111 # Start | Cont | ITO
+	stwio r10, 4(r8)
 
-    # 4. Ligar o timer (START | CONT | ITO)
-    movia r10, 0b111
-    stwio r10, 4(r8)
-
-    # 5. Habilitar interrupções no processador (IENABLE e STATUS)
     movia r10, 0b1
-    wrctl ienable, r10
-    
-    movi r10, 1
-    wrctl status, r10
+	wrctl ienable, r10
+	movi r10, 1
+	wrctl status, r10
+	ret
 
-    ret
-
-.org 0x500
+.data
 rotation_active:
 	.word 0
 
@@ -536,7 +576,7 @@ rotation_offset: .word 0  # Índice inicial da janela
 prev_keys:       .word 0xFF # Estado anterior das chaves
 
 display_pattern:
-    .byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x7D, 0x5B, 0x3F, 0x5B, 0x00, 0x06, 0x3F
+    .byte 0x00, 0x7D, 0x5B, 0x3F, 0x5B, 0x00, 0x06, 0x3F
 
 msg_prompt:
     .string  "Entre com o comando: "
@@ -544,7 +584,6 @@ msg_prompt:
 cmd_buffer:
     .skip   8      # espaço para 4 chars + ENTER
 
-.data
 # Tabela de códigos 7-segmentos (cátodo comum - DE2)
 SEVEN_SEG_TABLE:
     .byte 0x3F  # 0
