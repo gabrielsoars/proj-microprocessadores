@@ -1,8 +1,16 @@
-.equ SEVEN_SEG_BASE, 0x10000020      # Displays 7 Segmentos (HEX)
-.equ SWITCHES_BASE, 0x10000040       # Chaves (SW)
+.include "constantes.s"
 
 .global TRIANG_FUNCTION
 TRIANG_FUNCTION:
+	movia r14, rotation_active
+	stw r0, 0(r14) # CORREÇÃO: stw (word)
+
+	# carrega o segundo termo digitado da memória
+	ldb r15, 1(r8) # mudar para acessar como índice
+	addi r15, r15, -48 # transforma termo digitado na memória em um inteiro
+
+	bne r15, r0, TRIANG_RETURN # se não for 0 (comando: 10), vai para o fim da rotina
+
 	addi sp, sp, -4
 
 	stw ra, 4(sp)
@@ -13,6 +21,7 @@ TRIANG_FUNCTION:
 
 	ldw ra, 4(sp)
 	addi sp, sp, 4
+TRIANG_RETURN:
     ret
 
 
@@ -57,11 +66,11 @@ _display_decimal:
 
 	stw ra, 4(sp)
 
-    movia r8, SEVEN_SEG_BASE
-    movi r14, 0x0                  # Código para display apagado
-    movi r6, 10                     # Divisor
-    mov r7, r0                      # Offset do display
-    movi r5, 6                      # Máximo 6 dígitos
+    movia r8, SEVEN_SEG_LOW
+    movi r14, 0x0  # Código para display apagado
+    movi r6, 10 # Divisor
+    mov r7, r0 # Offset do display
+    movi r5, 8 # Máximo 6 dígitos
 
     # Trata caso especial: número zero
     bne r4, r0, LOOP_CONVERT_DISPLAY
@@ -83,8 +92,21 @@ LOOP_CONVERT_DISPLAY:
     add r10, r10, r9
     ldb r9, 0(r10)
 
-    # Escreve no display correto
+    # Logica simples de escrita: Base + Offset
+    # Se offset > 3 precisa mudar de base. 
+    # Para simplificar a função triangular existente, vamos assumir que cabe em 4 displays ou adaptar:
+    movi r13, 4
+    blt r7, r13, DISP_DEC_LOW
+    
+    movia r11, SEVEN_SEG_HIGH
+    subi r13, r7, 4
+    add r11, r11, r13
+    br DISP_DEC_WRITE
+
+DISP_DEC_LOW:
     add r11, r8, r7
+
+DISP_DEC_WRITE:
     stbio r9, 0(r11)
 
     addi r7, r7, 1
@@ -93,7 +115,17 @@ LOOP_CONVERT_DISPLAY:
 # Apaga displays não utilizados
 LOOP_BLANK_DIGITS:
     bge r7, r5, END_DISPLAY
+    
+    movi r13, 4
+    blt r7, r13, BLANK_LOW
+    movia r11, SEVEN_SEG_HIGH
+    subi r13, r7, 4
+    add r11, r11, r13
+    br BLANK_WRITE
+
+BLANK_LOW:
     add r11, r8, r7
+BLANK_WRITE:
     stbio r14, 0(r11)
     addi r7, r7, 1
     br LOOP_BLANK_DIGITS
@@ -102,7 +134,6 @@ END_DISPLAY:
 	ldw ra, 4(sp)
 	addi sp, sp, 4
     ret
-
 
 .data
 # Tabela de códigos 7-segmentos (cátodo comum - DE2)

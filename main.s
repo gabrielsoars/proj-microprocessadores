@@ -33,8 +33,7 @@
  * 
  */
 
-.equ UART, 0x10001000
-.equ	STACK, 0x10000
+ .include "consts.s"
 
 .global _start
 _start:
@@ -132,7 +131,19 @@ ROTATE_CALL:
 	call ROTATE_FUNCTIONS
 	br MAIN_LOOP
 
-.org 0x500
+.data
+rotation_active:
+	.word 0
+
+.align 2
+.global rotation_dir
+rotation_dir:    .word 0  # 0 = Dir, 1 = Esq
+.global rotation_paused
+rotation_paused: .word 0  # 0 = Run, 1 = Pause
+.global rotation_offset
+rotation_offset: .word 0  # Índice inicial da janela
+prev_keys:       .word 0xFF # Estado anterior das chaves
+
 msg_prompt:
     .string  "Entre com o comando: "
 

@@ -1,0 +1,9 @@
+.equ UART, 0x10001000
+.equ STACK, 0x10000
+.equ SEVEN_SEG_LOW,  0x10000020      # Displays HEX3 até HEX0
+.equ SEVEN_SEG_HIGH, 0x10000030      # Displays HEX7 até HEX4
+.equ SWITCHES_BASE, 0x10000040       # Chaves (SW)
+.equ LEDS, 0x10000000
+.equ TEMPORIZADOR, 0x10002000
+.equ KEYS_BASE, 0x10000050           # Pushbuttons (KEY3-KEY0)
+.equ APAGAR_MASK, 0x11111110

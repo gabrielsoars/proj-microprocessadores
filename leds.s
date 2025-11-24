@@ -1,5 +1,4 @@
-.equ LEDS, 0x10000000
-.equ APAGAR_MASK, 0x11111110
+.include "consts.s"
 
 .global LED_FUNCTIONS
 LED_FUNCTIONS:
