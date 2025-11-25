@@ -269,6 +269,9 @@ get_command:
 
 		stbio r10, 0(r16)
 
+		movia r13, 0x08 # Carrega o valor BACKSPACE para r13
+		beq r10, r13, BACKSPACE_TREAT # Verifica se o caractere lido é BACKSPACE
+
 		stb r10, 0(r23)             # salva no buffer
 		addi    r23, r23, 1
 
@@ -276,6 +279,11 @@ get_command:
 		bne r10, r13, LOOP_DATA # Verifica se o caractere lido é ENTER
 
     ret
+
+# Tratamento para backspace ser apenas impresso e decrementar o endereço atual do buffer
+BACKSPACE_TREAT:
+		addi r23, r23, -1
+		br LOOP_DATA
 
 SWITCH_FUNCTIONS:
 	addi sp, sp, -4 # inicia 4 bytes no frame
