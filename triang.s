@@ -1,7 +1,10 @@
-.include "constantes.s"
+.include "consts.s"
 
 .global TRIANG_FUNCTION
 TRIANG_FUNCTION:
+    addi sp, sp, -4
+	stw ra, 4(sp)
+
 	movia r14, rotation_active
 	stw r0, 0(r14) # CORREÇÃO: stw (word)
 
@@ -10,18 +13,13 @@ TRIANG_FUNCTION:
 	addi r15, r15, -48 # transforma termo digitado na memória em um inteiro
 
 	bne r15, r0, TRIANG_RETURN # se não for 0 (comando: 10), vai para o fim da rotina
-
-	addi sp, sp, -4
-
-	stw ra, 4(sp)
 	
     call _read_switches             # Lê chaves -> r2
     call _calc_triangular           # Calcula T(N) -> r4
     call _display_decimal           # Exibe nos displays
-
-	ldw ra, 4(sp)
-	addi sp, sp, 4
 TRIANG_RETURN:
+    ldw ra, 4(sp)
+	addi sp, sp, 4
     ret
 
 
@@ -29,7 +27,6 @@ TRIANG_RETURN:
 # Retorna: r2 = valor 8 bits
 _read_switches:
 	addi sp, sp, -4
-
 	stw ra, 4(sp)
 
     movia r8, SWITCHES_BASE
@@ -46,7 +43,6 @@ _read_switches:
 # Retorna: r4 = T(N)
 _calc_triangular:
 	addi sp, sp, -4
-
 	stw ra, 4(sp)
 
     addi r3, r2, 1                  # r3 = N + 1
@@ -63,7 +59,6 @@ _calc_triangular:
 # Usa: r5, r6, r7, r8, r9, r10, r11, r14
 _display_decimal:
 	addi sp, sp, -4
-
 	stw ra, 4(sp)
 
     movia r8, SEVEN_SEG_LOW

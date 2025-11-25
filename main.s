@@ -35,6 +35,8 @@
 
  .include "consts.s"
 
+ .global MAIN_LOOP
+
 .org 0x20
 	addi sp, sp, -4
 	stw ra, (sp)
@@ -214,8 +216,8 @@ _start:
 
 	movia r16, UART
 
-	MAIN_LOOP:		
-		movia r23, cmd_buffer		
+	MAIN_LOOP:
+		movia r23, cmd_buffer
 
 		# print "Entre com o comando: "
 		movia r17, msg_prompt
@@ -227,82 +229,6 @@ _start:
 		call SWITCH_FUNCTIONS
 
 		br      MAIN_LOOP
-
-_print_string:
-
-	ldb r18, 0(r17)
-	beq r18, r0, END_PRINT_TEXT
-
-	LOOP_PRINT:
-		ldwio r19, 4(r16)
-		andhi r19, r19, 0xFFFF
-		beq r19, r0, LOOP_PRINT
-		
-		stwio r18, 0(r16)
-		addi r17, r17, 1
-
-		br _print_string
-
-	END_PRINT_TEXT:
-		ret
-
-get_command:
-	LOOP_DATA:
-		ldwio r8, 0(r16) # Ler Data Register
-		andi r10, r8, 0x8000
-		beq r10, r0, LOOP_DATA
-
-		# dado <- 8 bits inferiores de r
-		andi r10, r8, 0x00FF
-
-	LOOP_CONTROL:
-		ldwio r15, 4(r16)
-		andhi r15, r15, 0xFFFF
-		beq r15, r0, LOOP_CONTROL
-
-		stbio r10, 0(r16)
-
-		stb r10, 0(r23)             # salva no buffer
-		addi    r23, r23, 1
-
-		movia r13, 0xA # Carrega o valor ENTER para r13
-		bne r10, r13, LOOP_DATA # Verifica se o caractere lido é ENTER
-
-    ret
-
-SWITCH_FUNCTIONS:
-	addi sp, sp, -4 # inicia 4 bytes no frame
-
-	stw ra, 4(sp)
-
-	movia r8, cmd_buffer
-	movi r10, 1
-	movi r11, 2
-	ldb r9, 0(r8)
-
-	addi r9, r9, -48
-	beq r9, r0, LEDS_CALL
-
-	beq r9, r10, TRIANG_CALL
-
-	beq r9, r11, ROTATE_CALL
-
-	ldw ra, 4(sp)
-	addi sp, sp, 4
-
-	ret
-
-LEDS_CALL:
-	call LED_FUNCTIONS
-	br MAIN_LOOP
-
-TRIANG_CALL:
-	call TRIANG_FUNCTION
-	br MAIN_LOOP
-
-ROTATE_CALL:
-	call ROTATE_FUNCTIONS
-	br MAIN_LOOP
 
 .data
 .global rotation_active
@@ -317,9 +243,11 @@ rotation_paused: .word 0  # 0 = Run, 1 = Pause
 rotation_offset: .word 0  # Índice inicial da janela
 prev_keys:       .word 0xFF # Estado anterior das chaves
 
+.global msg_prompt
 msg_prompt:
     .string  "Entre com o comando: "
 
+.global cmd_buffer
 cmd_buffer:
     .skip   8      # espaço para 4 chars + ENTER
 

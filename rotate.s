@@ -2,6 +2,8 @@
 
 .global ROTATE_FUNCTIONS
 ROTATE_FUNCTIONS:
+    addi sp, sp, -4
+	stw ra, 4(sp)
     # r8 já contém o endereço de cmd_buffer
     # Verifica o segundo caractere (r8 + 1)
     ldb r9, 1(r8)
@@ -12,9 +14,14 @@ ROTATE_FUNCTIONS:
     movi r10, 1
     beq r9, r10, STOP_ROTATION # Se '1' -> Comando 21
     
+    ldw ra, 4(sp)
+	addi sp, sp, 4
     ret
 
 START_ROTATION:
+    addi sp, sp, -4
+	stw ra, 4(sp)
+
 	movia r14, rotation_active
 	movia r13, 1 
 	stw r13, 0(r14)
@@ -29,9 +36,14 @@ START_ROTATION:
     movia r14, rotation_offset
     stw r0, 0(r14)
 
+    ldw ra, 4(sp)
+	addi sp, sp, 4
     ret
 
 STOP_ROTATION:
+    addi sp, sp, -4
+	stw ra, 4(sp)
+
     movia r14, rotation_active
     stw r0, 0(r14)
     
@@ -52,4 +64,6 @@ STOP_ROTATION:
     stbio r9, 2(r8)
     stbio r9, 3(r8)
     
+    ldw ra, 4(sp)
+	addi sp, sp, 4
     ret
