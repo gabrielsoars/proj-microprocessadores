@@ -3,8 +3,7 @@
 .global ENABLE_INTERRUPTIONS
 ENABLE_INTERRUPTIONS:
     movia r8, TEMPORIZADOR
-    movi r10, 0
-    stwio r10, 4(r8) # Stop
+    stwio r0, 4(r8) # Stop
     stwio r10, 0(r8) # Clear TO
 
     movia r11, 10000000 # 200ms

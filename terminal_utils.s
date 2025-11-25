@@ -1,15 +1,15 @@
 .global _print_string
 _print_string:
-	ldb r18, 0(r17)
-	beq r18, r0, END_PRINT_TEXT
+	ldb r18, 0(r17) # puxa caractere salvo na memória
+	beq r18, r0, END_PRINT_TEXT # se caractere não foi encontrado, sai da impressão
 
 	LOOP_PRINT:
 		ldwio r19, 4(r16)
 		andhi r19, r19, 0xFFFF
 		beq r19, r0, LOOP_PRINT
 		
-		stwio r18, 0(r16)
-		addi r17, r17, 1
+		stwio r18, 0(r16) # escrever no terminal
+		addi r17, r17, 1 # incrementa o endereço de msg_prompt (próximo caractere)
 
 		br _print_string
 
@@ -21,7 +21,7 @@ get_command:
 	LOOP_DATA:
 		ldwio r8, 0(r16) # Ler Data Register
 		andi r10, r8, 0x8000
-		beq r10, r0, LOOP_DATA
+		beq r10, r0, LOOP_DATA # se ainda não há um caractere digitado, continua checando
 
 		# dado <- 8 bits inferiores de r
 		andi r10, r8, 0x00FF
@@ -29,17 +29,22 @@ get_command:
 	LOOP_CONTROL:
 		ldwio r15, 4(r16)
 		andhi r15, r15, 0xFFFF
-		beq r15, r0, LOOP_CONTROL
+		beq r15, r0, LOOP_CONTROL # verifica se pode escrever no terminal
 
-		stbio r10, 0(r16)
+		stbio r10, 0(r16) # escreve o caractere digitado no terminal
 
-		movia r13, 0x08
-		beq r10, r13, NAO_SALVA
-		stb r10, 0(r23)             # salva no buffer
-		addi    r23, r23, 1
+		movia r13, 0x08 # Carrega o valor BACKSPACE para r13
+		beq r10, r13, BACKSPACE_TREAT # Verifica se o caractere lido é BACKSPACE
 
-	NAO_SALVA:
+		stb r10, 0(r23) # salva no buffer
+		addi    r23, r23, 1 # incrementa endereço pra salvar no buffer
+
 		movia r13, 0xA # Carrega o valor ENTER para r13
 		bne r10, r13, LOOP_DATA # Verifica se o caractere lido é ENTER
 
     ret
+
+# Tratamento para backspace ser apenas impresso e decrementar o endereço atual do buffer
+BACKSPACE_TREAT:
+	addi r23, r23, -1
+	br LOOP_DATA

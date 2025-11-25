@@ -41,8 +41,8 @@
 	addi sp, sp, -4
 	stw ra, (sp)
 
-	rdctl et, ipending /* Check if external interrupt occurred */
-	beq et, r0, OTHER_EXCEPTIONS /* If zero, check exceptions */
+	rdctl et, ipending # Check if external interrupt occurred 
+	beq et, r0, OTHER_EXCEPTIONS  /* If zero, check exceptions */
 	subi ea, ea, 4 /* Hardware interrupt, decrement ea to execute the interrupted */
 
 	/* instruction upon return to main program */
@@ -78,8 +78,7 @@ EXT_IRQ0:
 
 	# limpar o bit TO do Status Register (limpa o ipending)
 	movia r8, TEMPORIZADOR
-    movi r9, 0
-	stwio r9, 0(r8) # Escreve 0 no status para limpar TO
+	stwio r0, 0(r8) # Escreve 0 no status para limpar TO
 
     # Verifica se a rotação está ativa
 	movia r12, rotation_active
@@ -156,7 +155,7 @@ UPDATE_DISPLAY:
     ldw r10, 0(r14)
     
     movi r11, 0           # i = 0
-    movi r12, 8           # Limite i < 8 (AGORA SÃO 8 DISPLAYS)
+    movi r12, 8           # Limite i < 8
     movi r13, 8          # Tamanho do buffer circular
 
 LOOP_DISP:
@@ -226,9 +225,9 @@ _start:
 		# getCommand()
 		call get_command  # lê o que foi digitado no terminal e salva no buffer até encontrar um ENTER
 		
-		call SWITCH_FUNCTIONS
+		call SWITCH_FUNCTIONS # lê o que foi salvo no buffer e redireciona para as rotinas especializadas
 
-		br      MAIN_LOOP
+		br MAIN_LOOP
 
 .data
 .global rotation_active
